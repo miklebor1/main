@@ -1,3 +1,2 @@
-# main
-LR.DASH
+dash
 Прочитай меня
