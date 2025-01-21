@@ -1,89 +1,147 @@
-import pandas as pd
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
-# Загрузка данных
-df = pd.read_csv('C:/Users/miklebor/Downloads/financial_data.csv') #Убедитесь, что файл существует по данному пути
-df['date'] = pd.to_datetime(df['date'])
+import pandas as pd
 
-# Создание Dash приложения
-app = Dash(__name__)  # Передаем '__name__' вместо 'name'
+# Данные, которые можно редактировать вручную
+data = {
+    'date': ['Февраль 1', 'Март 1', 'Апрель 1', 'Май 1', 'Июнь 1'],
+    'income': [20000, 30000, 40000, 50000, 60000],  # Доходы
+    'expenses': [10000, 15000, 20000, 25000, 30000]  # Расходы
+}
 
+# Создание DataFrame
+df = pd.DataFrame(data)
+
+# Рассчёт прибыли (доходы - расходы)
+df['profit'] = df['income'] - df['expenses']
+
+# Рассчёт общего дохода и расходов
+total_income = df['income'].sum()
+total_expenses = df['expenses'].sum()
+
+# Рассчёт процентного соотношения для каждого месяца
+df['income_percentage'] = (df['income'] / total_income) * 100
+df['expenses_percentage'] = (df['expenses'] / total_expenses) * 100
+
+# Данные для гистограммы распределения прибыли
+profit_data = {
+    'Прибыль': [10000, 15000, 20000, 25000, 30000],  # Прибыль
+    'Количество': [1, 1, 1, 1, 1]  # Количество случаев
+}
+df_profit = pd.DataFrame(profit_data)
+
+# Создание Dash-приложения
+app = Dash(__name__)
+
+# Макет приложения
 app.layout = html.Div([
-    html.H1("Финансовый Аналитический Дашборд Маркетплейса Айфонов",
-            style={'text-align': 'center', 'color': '#2C3E50'}),
+    html.H1(children='Анализ доходов, расходов и прибыли', style={'textAlign': 'center'}),
 
-    html.Div([
-        html.P("Этот дашборд предоставляет комплексный анализ финансовых данных, включая доходы, расходы и прибыль."
-               "Вы можете выбрать период анализа (месяц, квартал или год), чтобы визуально отслеживать свои финансовые потоки.",
-               style={'text-align': 'center', 'font-size': '18px'})
-    ]),
+    # Линейный график динамики доходов и расходов
+    html.H3("Динамика доходов и расходов"),
+    dcc.Graph(id='line-graph'),
 
-    dcc.Dropdown(
-        id='period-dropdown',
-        options=[
-            {'label': 'Месяц', 'value': 'month'},
-            {'label': 'Квартал', 'value': 'quarter'},
-            {'label': 'Год', 'value': 'year'},
-        ],
-        value='month',
-        style={'width': '50%', 'margin': 'auto', 'padding': '10px'}
-    ),
+    # Круговой график структуры доходов и расходов
+    html.H3("Структура доходов и расходов за все месяцы"),
+    dcc.Graph(id='pie-graph'),
 
-    html.Div([
-        dcc.Graph(id='income-expenses-line-chart'),
-        dcc.Graph(id='expenses-category-pie-chart'),
-        dcc.Graph(id='profit-distribution-histogram'),
-        dcc.Graph(id='profit-scatter-plot'),
-        html.Div(id='financial-indicators', style={'text-align': 'center', 'font-size': '20px', 'margin-top': '20px'})
-    ], style={'padding': '20px'}),
-], style={'backgroundColor': '#ECF0F1', 'padding': '20px'})
-@app.callback(
-    Output('income-expenses-line-chart', 'figure'),
-    Output('expenses-category-pie-chart', 'figure'),
-    Output('profit-distribution-histogram', 'figure'),
-    Output('profit-scatter-plot', 'figure'),
-    Output('financial-indicators', 'children'),
-    Input('period-dropdown', 'value')
+    # Гистограмма распределения прибыли
+    html.H3("Распределение прибыли"),
+    dcc.Graph(id='bar-graph'),
+
+    # Точечный график корреляции между расходами и прибылью
+    html.H3("Корреляция между расходами и прибылью"),
+    dcc.Graph(id='scatter-graph')
+])
+
+
+# Callback для обновления линейного графика
+@callback(
+    Output('line-graph', 'figure'),
+    Input('line-graph', 'id')
 )
-def update_dash(period):
-    # Группировка данных по выбранному периоду
-    if period == 'month':
-        grouped_data = df.groupby(pd.Grouper(key='date', freq='M')).sum().reset_index()
-    elif period == 'quarter':
-        grouped_data = df.groupby(pd.Grouper(key='date', freq='Q')).sum().reset_index()
-    elif period == 'year':
-        grouped_data = df.groupby(pd.Grouper(key='date', freq='Y')).sum().reset_index()
+def update_line_graph(_):
+    fig = px.line(
+        df,
+        x='date',
+        y=['income', 'expenses'],  # Линии для доходов и расходов
+        title='Динамика доходов и расходов',
+        labels={'value': 'Сумма (в долларах)', 'date': 'Дата'},  # Подписи осей
+        markers=True  # Добавить маркеры на линии
+    )
+    fig.update_traces(line=dict(width=2))  # Толщина линий
+    fig.update_layout(legend_title_text='Тип значений')  # Заголовок легенды
+    return fig
 
-    # Расчет прибыли
-    grouped_data['profit'] = grouped_data['income'] - grouped_data['expenses']
-    # Динамика доходов и расходов
-    income_expenses_fig = px.line(grouped_data, x='date', y=['income', 'expenses'], title='Динамика доходов и расходов')
-    income_expenses_fig.update_layout(paper_bgcolor='lightblue', title_font=dict(size=24))
-    income_expenses_fig.for_each_trace(
-        lambda t: t.update(name=t.name.replace('income', 'Доходы').replace('expenses', 'Расходы')))
 
-    income_expenses_fig.update_layout(legend_title_text='Тип значений', xaxis_title='Дата', yaxis_title='Значение')
-    # Структура расходов по категориям (сгруппируем по месяцам)
-    expenses_categories = df.groupby(pd.Grouper(key='date', freq='M'))['expenses'].sum().reset_index()
-    expenses_pie_fig = px.pie(expenses_categories, names='date', values='expenses',
-                              title='Структура расходов по категориям')
-    # Анализ распределения прибыли
-    profit_hist_fig = px.histogram(grouped_data, x='profit', title='Распределение прибыли')
-    profit_hist_fig.update_layout(paper_bgcolor='lightcoral', title_font=dict(size=24))
-    profit_hist_fig.update_layout(xaxis_title='Прибыль', yaxis_title='Количество')
-    # Анализ корреляции между прибылью и расходами
-    scatter_fig = px.scatter(grouped_data, x='expenses', y='profit',
-                             title='Анализ корреляции между прибылью и расходами')
-    scatter_fig.update_layout(paper_bgcolor='lightyellow', title_font=dict(size=24))
-    scatter_fig.update_layout(xaxis_title='Расходы', yaxis_title='Прибыль')
-    # Финансовые показатели
-    total_income = grouped_data['income'].sum()
-    total_expenses = grouped_data['expenses'].sum()
-    total_profit = total_income - total_expenses
+# Callback для обновления кругового графика
+@callback(
+    Output('pie-graph', 'figure'),
+    Input('pie-graph', 'id')
+)
+def update_pie_graph(_):
+    # Создание данных для кругового графика
+    pie_data = {
+        'Месяц': df['date'],
+        'Доходы_процент': df['income_percentage'],
+        'Расходы_процент': df['expenses_percentage']
+    }
+    df_pie = pd.DataFrame(pie_data)
 
-    indicators = f'Прибыль: {total_profit}, Выручка: {total_income}, Расходы: {total_expenses}'
-    return income_expenses_fig, expenses_pie_fig, profit_hist_fig, scatter_fig, indicators
+    # Построение кругового графика
+    fig = px.pie(
+        df_pie,
+        values='Доходы_процент',  # Используем проценты доходов
+        names='Месяц',
+        title='Структура доходов за все месяцы',
+        hole=0.4  # Создаёт кольцевой график (опционально)
+    )
+    return fig
 
-# Запуск сервера приложения
+
+# Callback для обновления гистограммы распределения прибыли
+@callback(
+    Output('bar-graph', 'figure'),
+    Input('bar-graph', 'id')
+)
+def update_bar_graph(_):
+    fig = px.bar(
+        df_profit,
+        x='Прибыль',  # Ось X: Прибыль
+        y='Количество',  # Ось Y: Количество случаев
+        title='Гистограмма распределения прибыли',
+        labels={'Прибыль': 'Прибыль (в долларах)', 'Количество': 'Количество случаев'},  # Подписи осей
+        text='Количество',  # Отображение значений на столбцах
+        color='Прибыль',  # Цвет столбцов в зависимости от прибыли
+        color_continuous_scale='Viridis'  # Цветовая шкала
+    )
+    fig.update_traces(textposition='outside')  # Позиция текста на столбцах
+    fig.update_layout(legend_title_text='Прибыль')  # Заголовок легенды
+    return fig
+
+
+# Callback для обновления точечного графика корреляции
+@callback(
+    Output('scatter-graph', 'figure'),
+    Input('scatter-graph', 'id')
+)
+def update_scatter_graph(_):
+    fig = px.scatter(
+        df,
+        x='expenses',  # Ось X: Расходы
+        y='profit',  # Ось Y: Прибыль
+        title='Корреляция между расходами и прибылью',
+        labels={'expenses': 'Расходы (в долларах)', 'profit': 'Прибыль (в долларах)'},  # Подписи осей
+        trendline='ols',  # Линия тренда (опционально)
+        color='date',  # Цвет точек в зависимости от даты
+        size='income',  # Размер точек в зависимости от доходов
+        hover_name='date'  # Подсказка при наведении
+    )
+    fig.update_traces(marker=dict(line=dict(width=1, color='black')))  # Границы точек
+    fig.update_layout(legend_title_text='Дата')  # Заголовок легенды
+    return fig
+
+
+# Запуск приложения
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)
